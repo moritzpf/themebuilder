@@ -2,6 +2,9 @@ import { green, red, blue, bold, underline } from "colorette";
 import pageConfig from "../blocks";
 import type { WordpressBlockTemplate } from "./WordpressBlocks";
 
+// disable ssl 
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
 class WordpressManager {
     public graphqlUrl: string|null = null
     public cmsData: any;
@@ -12,112 +15,51 @@ class WordpressManager {
     }
 
     async GetGQL(Query: string) {
-        const gqlurl = this.graphqlUrl as string;
-        const response = await fetch(gqlurl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                query: Query,
-                variables: {},
-            }),
-        });
-
-        const json = await response.json();
-        return json.data;
-    }
+      try {
+          const gqlurl = this.graphqlUrl as string;
+          const response = await fetch(gqlurl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                  query: Query,
+                  variables: {},
+              }),
+          });
+  
+          if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+          }
+  
+          const json = await response.json();
+          return json.data;
+      } catch (error) {
+          console.error("Error fetching GraphQL data:", error);
+          return null; // or handle the error as needed
+      }
+  }
+  
 
     async fetchData(registeredBlocks: Array<WordpressBlockTemplate>) {
         try {
-            let data = await this.GetGQL(
-                `
-            query GetCMSData {
-                pages {
-                    nodes {
-                      editorBlocks(flat: true) {
-                        __typename
-                        name` +
-                    this.buildGQLBlockAttributes(registeredBlocks) +
-                    `
-                      }
-                      date
-                      uri
-                      title
-                      slug
-                      id
-                      isPostsPage
-                      isFrontPage
-                      pageOptions {
-                        isLegalPage
-                      }
-                    }
-                  }
-                navigationSettings {
-                    navigationmenu {
-                      menupunkt {
-                        selectedPages {
-                          nodes {
-                            ... on Page {
-                              id
-                              title
-                              slug
-                              contentTypeName
-                            }
-                            ... on Artist {
-                              id
-                              slug
-                              title
-                              contentTypeName
-                            }
-                          }
-                        }
-                        nameDesReiters
-                        }   
-                    }
-                }
-                pagesettings {
-                    pageSettingsFields {
-                      companyName
-                      companyStreetAndNumber
-                      companyZipAndCity
-                      email
-                      instagramLink
-                      phone
-                      phone_technical
-                      logo {
-                        node {
-                          mediaItemUrl
-                          srcSet
-                        }
-                      }
-                      loadingAnimationText
-                      loadingAnimationImages {
-                        nodes {
-                          srcSet  
-                          mediaItemUrl
-                        }
-                      }
-                      footerCallToActionUpperTitle
-                      footerCallToActionMainTitle
-                    }
-                  }
-                artists {
-                    nodes {
-                      title
-                      slug
-                      editorBlocks(flat: true) {
-                        __typename
-                        name` +
-                    this.buildGQLBlockAttributes(registeredBlocks) +
-                    `
-                      }
-                    }
-                  }
-            }
-            `
-            );
+            let data = await this.GetGQL(pageConfig.gqlQueryGenerator(this.buildGQLBlockAttributes(registeredBlocks)));
             if (!data) {
-                console.log(red("Got no data from CMS, reupload the theme and try again"));
-                return;
+
+                // minimal gql query
+                data = await this.GetGQL(`
+                query MinimalQuiery {
+                    pages {
+                      nodes {
+                        title
+                      }
+                    }
+                  }
+                `);
+
+                if (data) {
+                    throw new Error("CMS Fetch Error. Minimal query succeeded.");
+                } else {
+                    throw new Error("CMS Fetch Error. Minimal query failed.");
+                }
             }
             if (data && data.pages && data.pages.nodes) {
                 data.pages.nodes.forEach((node: any) => {
@@ -141,8 +83,7 @@ class WordpressManager {
             // console.log(JSON.stringify(data, null, 2));
             return data;
         } catch (error) {
-            console.error("Error fetching data:", error);
-            return [];
+            throw error;
         }
     }
 
