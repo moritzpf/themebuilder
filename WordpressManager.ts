@@ -1,12 +1,13 @@
 import { green, red, blue, bold, underline } from "colorette";
 import pageConfig from "../blocks";
 import type { WordpressBlockTemplate } from "./WordpressBlocks";
+import { createBlockFiles } from "./ThemeCreator";
 
-// disable ssl 
+// disable ssl
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 class WordpressManager {
-    public graphqlUrl: string|null = null
+    public graphqlUrl: string | null = null;
     public cmsData: any;
 
     async init(graphqlUrl: string, registeredBlocks: Array<WordpressBlockTemplate>): Promise<any> {
@@ -15,48 +16,40 @@ class WordpressManager {
     }
 
     async GetGQL(Query: string) {
-      try {
-          const gqlurl = this.graphqlUrl as string;
-          const response = await fetch(gqlurl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                  query: Query,
-                  variables: {},
-              }),
-          });
-  
-          if (!response.ok) {
-              throw new Error(`HTTP error! status: ${response.status}`);
-          }
-  
-          const json = await response.json();
-          return json.data;
-      } catch (error) {
-          console.error("Error fetching GraphQL data:", error);
-          return null; // or handle the error as needed
-      }
-  }
-  
+        try {
+            const gqlurl = this.graphqlUrl as string;
+            const response = await fetch(gqlurl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    query: Query,
+                    variables: {},
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const json = await response.json();
+            return json.data;
+        } catch (error) {
+            console.error("Error fetching GraphQL data:", error);
+            return null; // or handle the error as needed
+        }
+    }
 
     async fetchData(registeredBlocks: Array<WordpressBlockTemplate>) {
         try {
             let data = await this.GetGQL(pageConfig.gqlQueryGenerator(this.buildGQLBlockAttributes(registeredBlocks)));
             if (!data) {
-
                 // minimal gql query
-                data = await this.GetGQL(`
-                query MinimalQuiery {
-                    pages {
-                      nodes {
-                        title
-                      }
-                    }
-                  }
-                `);
+                data = await this.GetGQL(pageConfig.gqlQueryGenerator(this.buildGQLBlockAttributes([])));
 
                 if (data) {
-                    throw new Error("CMS Fetch Error. Minimal query succeeded.");
+                    console.error(red("Blocks are outdated. Generating block files..."));
+                    await createBlockFiles();
+                    console.log(red("Please upload the generated block files to your CMS."));
                 } else {
                     throw new Error("CMS Fetch Error. Minimal query failed.");
                 }
@@ -64,17 +57,19 @@ class WordpressManager {
             if (data && data.pages && data.pages.nodes) {
                 data.pages.nodes.forEach((node: any) => {
                     // Loop through each editorBlock
-                    node.editorBlocks.forEach((block: any) => {
-                        // Check if the block has a data attribute
-                        if (block.attributes && block.attributes.data) {
-                            try {
-                                // Parse the JSON string into an object
-                                block.attributes.data = JSON.parse(block.attributes.data);
-                            } catch (e) {
-                                console.error("Error parsing block data as JSON:", e);
+                    if (node.editorBlocks) {
+                        node.editorBlocks.forEach((block: any) => {
+                            // Check if the block has a data attribute
+                            if (block.attributes && block.attributes.data) {
+                                try {
+                                    // Parse the JSON string into an object
+                                    block.attributes.data = JSON.parse(block.attributes.data);
+                                } catch (e) {
+                                    console.error("Error parsing block data as JSON:", e);
+                                }
                             }
-                        }
-                    });
+                        });
+                    }
                 });
             }
             if (process.env.NODE_ENV !== "production") {
@@ -88,6 +83,7 @@ class WordpressManager {
     }
 
     buildGQLBlockAttributes(registeredBlocks: Array<WordpressBlockTemplate>) {
+        if (!registeredBlocks || registeredBlocks.length === 0) return null;
         let gqlBlockAttributes = "";
         for (const block of registeredBlocks) {
             // if not exactly 2 uppercase letters or contains a /, throw an error
