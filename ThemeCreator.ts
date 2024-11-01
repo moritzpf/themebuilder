@@ -162,6 +162,8 @@ function generateAcfFieldGroup(block: WordpressBlockTemplate): string {
     
     Object.entries(block.attributes).forEach(([key, attr]) => {
 
+        key = key.replace(/[^a-zA-Z0-9]/g, '_');
+
         let additionalParameters: string = '';
         if (attr.additionalParameters) {
             Object.entries(attr.additionalParameters).forEach(([paramKey, paramValue]) => {

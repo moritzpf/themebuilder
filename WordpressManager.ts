@@ -1,4 +1,4 @@
-import { green, red, blue, bold, underline } from "colorette";
+import { green, red } from "colorette";
 import pageConfig from "../blocks";
 import type { WordpressBlockTemplate } from "./WordpressBlocks";
 import { createBlockFiles } from "./ThemeCreator";
